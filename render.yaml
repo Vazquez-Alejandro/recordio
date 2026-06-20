@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: recordio
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TWILIO_ACCOUNT_SID
+        value: ""
+      - key: TWILIO_AUTH_TOKEN
+        value: ""
+      - key: TWILIO_WHATSAPP_NUMBER
+        value: "whatsapp:+14155238886"
