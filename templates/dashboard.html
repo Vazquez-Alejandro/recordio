@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recordio - {{ biz.name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div class="min-h-screen flex">
+    <!-- Sidebar -->
+    <nav class="w-56 bg-white border-r p-4 flex flex-col gap-2 shrink-0">
+      <span class="text-lg font-bold text-green-600 mb-4">Recordio</span>
+      <a href="#hoy" class="text-gray-700 hover:text-green-600 font-medium" onclick="showTab('hoy')">📅 Hoy</a>
+      <a href="#todos" class="text-gray-700 hover:text-green-600 font-medium" onclick="showTab('todos')">📋 Todos</a>
+      <a href="#nuevo" class="text-gray-700 hover:text-green-600 font-medium" onclick="showTab('nuevo')">➕ Agregar turno</a>
+      <a href="#servicios" class="text-gray-700 hover:text-green-600 font-medium" onclick="showTab('servicios')">📦 Servicios</a>
+      <a href="#config" class="text-gray-700 hover:text-green-600 font-medium" onclick="showTab('config')">⚙️ Configuración</a>
+      <div class="flex-1"></div>
+      <a href="/logout" class="text-red-500 hover:text-red-700 text-sm">Cerrar sesión</a>
+    </nav>
+
+    <!-- Main -->
+    <main class="flex-1 p-6 overflow-y-auto">
+      <h1 class="text-2xl font-bold mb-6">{{ biz.name }}</h1>
+
+      <!-- Tab: Hoy -->
+      <section id="tab-hoy" class="tab-content">
+        <h2 class="text-lg font-semibold mb-3">Turnos de hoy ({{ today }})</h2>
+        {% if appointments %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b text-left text-gray-500"><th class="pb-2">Hora</th><th class="pb-2">Cliente</th><th class="pb-2">Teléfono</th><th class="pb-2">Servicio</th><th class="pb-2">Estado</th><th class="pb-2"></th></tr></thead>
+            <tbody>
+              {% for apt in appointments %}
+              <tr class="border-b hover:bg-gray-50">
+                <td class="py-2">{{ apt.time }}</td>
+                <td class="py-2 font-medium">{{ apt.client_name }}</td>
+                <td class="py-2 text-gray-500">{{ apt.client_phone }}</td>
+                <td class="py-2">{{ apt.service.name if apt.service else "-" }}</td>
+                <td class="py-2">
+                  {% if apt.status == "pending" %}<span class="text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded">Pendiente</span>
+                  {% elif apt.status == "confirmed" %}<span class="text-green-600 bg-green-50 px-2 py-0.5 rounded">Confirmado</span>
+                  {% elif apt.status == "cancelled" %}<span class="text-red-600 bg-red-50 px-2 py-0.5 rounded">Cancelado</span>
+                  {% else %}<span class="text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{{ apt.status }}</span>{% endif %}
+                </td>
+                <td class="py-2 flex gap-1">
+                  <form method="POST" action="/appointments/{{ apt.id }}/confirm" class="inline">
+                    <button class="text-xs text-green-600 hover:underline">Confirmar</button>
+                  </form>
+                  <form method="POST" action="/appointments/{{ apt.id }}/cancel" class="inline">
+                    <button class="text-xs text-red-600 hover:underline">Cancelar</button>
+                  </form>
+                  <form method="POST" action="/appointments/{{ apt.id }}/resend" class="inline">
+                    <button class="text-xs text-blue-600 hover:underline">Reenviar</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-gray-500">No hay turnos para hoy.</p>
+        {% endif %}
+      </section>
+
+      <!-- Tab: Todos los turnos -->
+      <section id="tab-todos" class="tab-content hidden">
+        <h2 class="text-lg font-semibold mb-3">Todos los turnos</h2>
+        <form method="GET" class="mb-4 flex gap-2">
+          <input type="date" name="filtro_fecha" value="{{ today }}"
+            class="border rounded px-3 py-1.5 text-sm" onchange="this.form.submit()">
+        </form>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b text-left text-gray-500"><th class="pb-2">Fecha</th><th class="pb-2">Hora</th><th class="pb-2">Cliente</th><th class="pb-2">Teléfono</th><th class="pb-2">Estado</th><th class="pb-2"></th></tr></thead>
+            <tbody>
+              {% for apt in appointments %}
+              <tr class="border-b hover:bg-gray-50">
+                <td class="py-2">{{ apt.date }}</td>
+                <td class="py-2">{{ apt.time }}</td>
+                <td class="py-2">{{ apt.client_name }}</td>
+                <td class="py-2 text-gray-500">{{ apt.client_phone }}</td>
+                <td class="py-2">
+                  {% if apt.status == "pending" %}<span class="text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded">Pendiente</span>
+                  {% elif apt.status == "confirmed" %}<span class="text-green-600 bg-green-50 px-2 py-0.5 rounded">Confirmado</span>
+                  {% elif apt.status == "cancelled" %}<span class="text-red-600 bg-red-50 px-2 py-0.5 rounded">Cancelado</span>
+                  {% else %}<span class="text-gray-500">{{ apt.status }}</span>{% endif %}
+                </td>
+                <td class="py-2">
+                  <form method="POST" action="/appointments/{{ apt.id }}/delete" class="inline" onsubmit="return confirm('Eliminar este turno?')">
+                    <button class="text-xs text-red-500 hover:underline">Eliminar</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab: Nuevo turno -->
+      <section id="tab-nuevo" class="tab-content hidden">
+        <h2 class="text-lg font-semibold mb-3">Agregar turno</h2>
+        <form method="POST" action="/appointments" class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+          <input type="text" name="client_name" placeholder="Nombre del cliente" required
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <input type="text" name="client_phone" placeholder="Teléfono (ej: +5491123456789)" required
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <input type="date" name="date" required
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <input type="time" name="time" required
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <select name="service_id" class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="0">Sin servicio</option>
+            {% for svc in services %}
+            <option value="{{ svc.id }}">{{ svc.name }}</option>
+            {% endfor %}
+          </select>
+          <input type="text" name="notes" placeholder="Notas (opcional)"
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <button type="submit" class="sm:col-span-2 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">Guardar turno</button>
+        </form>
+      </section>
+
+      <!-- Tab: Servicios -->
+      <section id="tab-servicios" class="tab-content hidden">
+        <h2 class="text-lg font-semibold mb-3">Servicios</h2>
+        <form method="POST" action="/services" class="flex gap-2 items-end mb-6">
+          <div><label class="text-xs text-gray-500">Nombre</label><input type="text" name="name" required class="border rounded px-3 py-1.5 text-sm"></div>
+          <div><label class="text-xs text-gray-500">Duración (min)</label><input type="number" name="duration" value="30" class="border rounded px-3 py-1.5 text-sm w-20"></div>
+          <div><label class="text-xs text-gray-500">Precio ($)</label><input type="number" name="price" step="0.01" value="0" class="border rounded px-3 py-1.5 text-sm w-24"></div>
+          <button type="submit" class="bg-green-600 text-white px-4 py-1.5 rounded text-sm hover:bg-green-700">Agregar</button>
+        </form>
+        {% if services %}
+        <ul class="space-y-2">
+          {% for svc in services %}
+          <li class="flex items-center justify-between bg-white border rounded-lg px-4 py-2">
+            <span>{{ svc.name }} <span class="text-gray-500 text-sm">({{ svc.duration_minutes }}min{% if svc.price %} - ${{ "%.2f"|format(svc.price) }}{% endif %})</span></span>
+            <form method="POST" action="/services/{{ svc.id }}/delete" onsubmit="return confirm('Eliminar {{ svc.name }}?')">
+              <button class="text-red-500 text-sm hover:underline">Eliminar</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-gray-500 text-sm">No hay servicios cargados.</p>
+        {% endif %}
+      </section>
+
+      <!-- Tab: Configuración -->
+      <section id="tab-config" class="tab-content hidden">
+        <h2 class="text-lg font-semibold mb-3">Configuración</h2>
+        <form method="POST" action="/settings" class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+          <div class="sm:col-span-2">
+            <label class="text-xs text-gray-500">Nombre del negocio</label>
+            <input type="text" name="name" value="{{ biz.name }}" required
+              class="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">Teléfono (WhatsApp del negocio)</label>
+            <input type="text" name="phone" value="{{ biz.phone or '' }}"
+              class="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">Zona horaria</label>
+            <select name="timezone" class="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+              <option value="America/Argentina/Buenos_Aires" {% if biz.timezone == "America/Argentina/Buenos_Aires" %}selected{% endif %}>Argentina</option>
+              <option value="America/Mexico_City" {% if biz.timezone == "America/Mexico_City" %}selected{% endif %}>México</option>
+              <option value="America/Bogota" {% if biz.timezone == "America/Bogota" %}selected{% endif %}>Colombia</option>
+              <option value="America/Lima" {% if biz.timezone == "America/Lima" %}selected{% endif %}>Perú</option>
+              <option value="America/Santiago" {% if biz.timezone == "America/Santiago" %}selected{% endif %}>Chile</option>
+              <option value="America/Caracas" {% if biz.timezone == "America/Caracas" %}selected{% endif %}>Venezuela</option>
+              <option value="UTC" {% if biz.timezone == "UTC" %}selected{% endif %}>UTC</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="flex items-center gap-2"><input type="checkbox" name="reminder_24h" {% if biz.reminder_24h %}checked{% endif %}> Recordatorio 24h antes</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="reminder_1h" {% if biz.reminder_1h %}checked{% endif %}> Recordatorio 1h antes</label>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">Recordatorio adicional (minutos antes, 0 = no)</label>
+            <input type="number" name="reminder_before_minutes" value="{{ biz.reminder_before_minutes }}"
+              class="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="text-xs text-gray-500">Template del mensaje</label>
+            <textarea name="message_template" rows="3" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">{{ biz.message_template }}</textarea>
+            <p class="text-xs text-gray-400 mt-1">Variables: {client}, {service}, {date}, {time}</p>
+          </div>
+          <button type="submit" class="sm:col-span-2 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">Guardar cambios</button>
+        </form>
+
+        <h3 class="text-md font-semibold mt-8 mb-3">Horarios de atención</h3>
+        <form method="POST" action="/settings/availability" class="flex flex-wrap gap-2 items-end mb-4">
+          <select name="day_of_week" class="border rounded px-3 py-1.5 text-sm">
+            {% for i in range(7) %}
+            <option value="{{ i }}">{{ weekdays[i] }}</option>
+            {% endfor %}
+          </select>
+          <div><label class="text-xs text-gray-500">Desde</label><input type="number" name="start_hour" min="0" max="23" value="9" class="border rounded px-2 py-1.5 text-sm w-16"></div>
+          <div><label class="text-xs text-gray-500">:</label><input type="number" name="start_minute" min="0" max="59" value="0" class="border rounded px-2 py-1.5 text-sm w-16"></div>
+          <div><label class="text-xs text-gray-500">Hasta</label><input type="number" name="end_hour" min="0" max="23" value="18" class="border rounded px-2 py-1.5 text-sm w-16"></div>
+          <div><label class="text-xs text-gray-500">:</label><input type="number" name="end_minute" min="0" max="59" value="0" class="border rounded px-2 py-1.5 text-sm w-16"></div>
+          <button type="submit" class="bg-green-600 text-white px-4 py-1.5 rounded text-sm hover:bg-green-700">Agregar</button>
+        </form>
+        {% if availabilities %}
+        <ul class="space-y-2 max-w-md">
+          {% for av in availabilities %}
+          <li class="flex items-center justify-between bg-white border rounded-lg px-4 py-2 text-sm">
+            <span>{{ weekdays[av.day_of_week] }} {{ av.start_time.strftime('%H:%M') }} - {{ av.end_time.strftime('%H:%M') }}</span>
+            <form method="POST" action="/settings/availability/{{ av.id }}/delete" onsubmit="return confirm('Eliminar horario?')">
+              <button class="text-red-500 text-sm hover:underline">Eliminar</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function showTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById('tab-' + name).classList.remove('hidden');
+      const hash = name === 'hoy' ? '' : name;
+      history.replaceState(null, '', hash ? '#' + hash : '/dashboard');
+    }
+    const tab = location.hash.replace('#', '') || 'hoy';
+    showTab(tab);
+  </script>
+</body>
+</html>
