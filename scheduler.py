@@ -78,3 +78,44 @@ async def _check():
                 db.commit()
     finally:
         db.close()
+
+
+async def send_daily_summaries():
+    last_date = ""
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            today_str = now.strftime("%Y-%m-%d")
+            if today_str != last_date:
+                last_date = today_str
+                await _send_summaries(today_str)
+        except Exception as e:
+            logger.error(f"Error en daily summary: {e}")
+        await asyncio.sleep(3600)
+
+
+async def _send_summaries(today_str: str):
+    from database import Business
+    db = SessionLocal()
+    try:
+        businesses = db.query(Business).filter(Business.active == True, Business.phone != None).all()
+        for biz in businesses:
+            apts = db.query(Appointment).filter(
+                Appointment.business_id == biz.id,
+                Appointment.date == today_str,
+                Appointment.status.in_(["pending", "confirmed"])
+            ).order_by(Appointment.time).all()
+            if not apts:
+                continue
+            lines = [f"📅 Resumen de hoy ({today_str}):", ""]
+            for a in apts:
+                svc = a.service.name if a.service else "turno"
+                status = "✅" if a.status == "confirmed" else "⏳"
+                lines.append(f"{status} {a.time} - {a.client_name} ({svc})")
+            lines.append("")
+            lines.append(f"Total: {len(apts)} turnos")
+            msg = "\n".join(lines)
+            await send_whatsapp(biz.phone, msg)
+            logger.info(f"Resumen diario enviado a {biz.name} ({biz.phone})")
+    finally:
+        db.close()

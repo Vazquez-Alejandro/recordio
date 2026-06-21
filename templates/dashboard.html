@@ -76,7 +76,10 @@
 
       <!-- Tab: Todos los turnos -->
       <section id="tab-todos" class="tab-content hidden">
-        <h2 class="text-lg font-semibold mb-3">Todos los turnos</h2>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">Todos los turnos</h2>
+          <a href="/export/csv" class="text-sm text-green-600 hover:underline">⬇ Exportar CSV</a>
+        </div>
         <form method="GET" action="/dashboard" class="mb-4 flex gap-2 items-end">
           <input type="date" name="date" value="{{ filter_date }}" class="border rounded px-3 py-1.5 text-sm">
           <button type="submit" class="bg-gray-200 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Filtrar</button>

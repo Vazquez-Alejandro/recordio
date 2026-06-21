@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from database import SessionLocal, Business, Service, Availability, Appointment
 from whatsapp import send_whatsapp
-from scheduler import check_reminders
+from scheduler import check_reminders, send_daily_summaries
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("recordio")
@@ -43,6 +43,7 @@ def get_business_from_token(token: str) -> int | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(check_reminders())
+    asyncio.create_task(send_daily_summaries())
     yield
 
 
@@ -341,8 +342,28 @@ async def whatsapp_webhook(req: Request, db: Session = Depends(get_db)):
             apt.confirmed_at = datetime.now(timezone.utc)
         elif message_body == "CANCELAR":
             apt.status = "cancelled"
+            svc_name = apt.service.name if apt.service else "turno"
+            await send_whatsapp(phone, f"Hola {apt.client_name}! Confirmamos la cancelación de tu {svc_name} del {apt.date} a las {apt.time}. Si querés reagendar, comunicate con el negocio.")
         db.commit()
     return "<Response></Response>"
+
+
+# ─── Export ────────────────────────────────────────────────────────
+
+@app.get("/export/csv")
+async def export_csv(db: Session = Depends(get_db), req: Request = None):
+    biz_id = get_current_business(req)
+    biz = db.query(Business).filter(Business.id == biz_id).first()
+    appointments = db.query(Appointment).filter(Appointment.business_id == biz_id).order_by(Appointment.date.desc(), Appointment.time).all()
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Fecha", "Hora", "Cliente", "Telefono", "Servicio", "Estado", "Notas", "Creado"])
+    for apt in appointments:
+        svc = apt.service.name if apt.service else ""
+        writer.writerow([apt.date, apt.time, apt.client_name, apt.client_phone, svc, apt.status, apt.notes or "", apt.created_at.strftime("%Y-%m-%d %H:%M") if apt.created_at else ""])
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(output.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="turnos-{biz.name}.csv"'})
 
 
 # ─── Public booking page ──────────────────────────────────────────
