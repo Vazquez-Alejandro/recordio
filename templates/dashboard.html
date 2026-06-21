@@ -24,6 +24,14 @@
     <main class="flex-1 p-6 overflow-y-auto">
       <h1 class="text-2xl font-bold mb-6">{{ biz.name }}</h1>
 
+      <!-- Stats -->
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="bg-white border rounded-xl px-4 py-3"><span class="text-2xl font-bold text-gray-800">{{ total_count }}</span><p class="text-xs text-gray-500">Hoy</p></div>
+        <div class="bg-white border rounded-xl px-4 py-3"><span class="text-2xl font-bold text-yellow-600">{{ pending_count }}</span><p class="text-xs text-gray-500">Pendientes</p></div>
+        <div class="bg-white border rounded-xl px-4 py-3"><span class="text-2xl font-bold text-green-600">{{ confirmed_count }}</span><p class="text-xs text-gray-500">Confirmados</p></div>
+        <div class="bg-white border rounded-xl px-4 py-3"><span class="text-2xl font-bold text-red-600">{{ cancelled_count }}</span><p class="text-xs text-gray-500">Cancelados</p></div>
+      </div>
+
       <!-- Tab: Hoy -->
       <section id="tab-hoy" class="tab-content">
         <h2 class="text-lg font-semibold mb-3">Turnos de hoy ({{ today }})</h2>
@@ -54,6 +62,7 @@
                   <form method="POST" action="/appointments/{{ apt.id }}/resend" class="inline">
                     <button class="text-xs text-blue-600 hover:underline">Reenviar</button>
                   </form>
+                  <button class="text-xs text-gray-600 hover:underline" onclick='editApt({{ apt.id }},"{{ apt.client_name }}","{{ apt.client_phone }}","{{ apt.date }}","{{ apt.time }}",{{ apt.service_id or 0 }},"{{ apt.notes or "" }}")'>Editar</button>
                 </td>
               </tr>
               {% endfor %}
@@ -68,36 +77,43 @@
       <!-- Tab: Todos los turnos -->
       <section id="tab-todos" class="tab-content hidden">
         <h2 class="text-lg font-semibold mb-3">Todos los turnos</h2>
-        <form method="GET" class="mb-4 flex gap-2">
-          <input type="date" name="filtro_fecha" value="{{ today }}"
-            class="border rounded px-3 py-1.5 text-sm" onchange="this.form.submit()">
+        <form method="GET" action="/dashboard" class="mb-4 flex gap-2 items-end">
+          <input type="date" name="date" value="{{ filter_date }}" class="border rounded px-3 py-1.5 text-sm">
+          <button type="submit" class="bg-gray-200 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Filtrar</button>
+          <a href="/dashboard" class="text-xs text-gray-500 hover:underline self-center">Limpiar</a>
         </form>
+        {% if appointments_all %}
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
-            <thead><tr class="border-b text-left text-gray-500"><th class="pb-2">Fecha</th><th class="pb-2">Hora</th><th class="pb-2">Cliente</th><th class="pb-2">Teléfono</th><th class="pb-2">Estado</th><th class="pb-2"></th></tr></thead>
+            <thead><tr class="border-b text-left text-gray-500"><th class="pb-2">Fecha</th><th class="pb-2">Hora</th><th class="pb-2">Cliente</th><th class="pb-2">Teléfono</th><th class="pb-2">Servicio</th><th class="pb-2">Estado</th><th class="pb-2"></th></tr></thead>
             <tbody>
-              {% for apt in appointments %}
+              {% for apt in appointments_all %}
               <tr class="border-b hover:bg-gray-50">
                 <td class="py-2">{{ apt.date }}</td>
                 <td class="py-2">{{ apt.time }}</td>
-                <td class="py-2">{{ apt.client_name }}</td>
+                <td class="py-2 font-medium">{{ apt.client_name }}</td>
                 <td class="py-2 text-gray-500">{{ apt.client_phone }}</td>
+                <td class="py-2">{{ apt.service.name if apt.service else "-" }}</td>
                 <td class="py-2">
                   {% if apt.status == "pending" %}<span class="text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded">Pendiente</span>
                   {% elif apt.status == "confirmed" %}<span class="text-green-600 bg-green-50 px-2 py-0.5 rounded">Confirmado</span>
                   {% elif apt.status == "cancelled" %}<span class="text-red-600 bg-red-50 px-2 py-0.5 rounded">Cancelado</span>
-                  {% else %}<span class="text-gray-500">{{ apt.status }}</span>{% endif %}
+                  {% else %}<span class="text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{{ apt.status }}</span>{% endif %}
                 </td>
-                <td class="py-2">
-                  <form method="POST" action="/appointments/{{ apt.id }}/delete" class="inline" onsubmit="return confirm('Eliminar este turno?')">
+                <td class="py-2 flex gap-1">
+                  <form method="POST" action="/appointments/{{ apt.id }}/delete" class="inline" onsubmit="return confirm('Eliminar?')">
                     <button class="text-xs text-red-500 hover:underline">Eliminar</button>
                   </form>
+                  <button class="text-xs text-gray-600 hover:underline" onclick='editApt({{ apt.id }},"{{ apt.client_name }}","{{ apt.client_phone }}","{{ apt.date }}","{{ apt.time }}",{{ apt.service_id or 0 }},"{{ apt.notes or "" }}")'>Editar</button>
                 </td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+        {% else %}
+        <p class="text-gray-500">No hay turnos.</p>
+        {% endif %}
       </section>
 
       <!-- Tab: Nuevo turno -->
@@ -221,6 +237,38 @@
     </main>
   </div>
 
+  <!-- Modal Editar -->
+  <div id="editModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50" style="display:none">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+      <h3 class="text-lg font-semibold mb-4">Editar turno</h3>
+      <form id="editForm" method="POST" class="flex flex-col gap-3">
+        <input id="edit_id" type="hidden" name="apt_id">
+        <input id="edit_name" type="text" name="client_name" placeholder="Nombre" required
+          class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+        <input id="edit_phone" type="text" name="client_phone" placeholder="Teléfono" required
+          class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+        <div class="grid grid-cols-2 gap-2">
+          <input id="edit_date" type="date" name="date" required
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <input id="edit_time" type="time" name="time" required
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+        </div>
+        <select id="edit_service" name="service_id" class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <option value="0">Sin servicio</option>
+          {% for svc in services %}
+          <option value="{{ svc.id }}">{{ svc.name }}</option>
+          {% endfor %}
+        </select>
+        <input id="edit_notes" type="text" name="notes" placeholder="Notas"
+          class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+        <div class="flex gap-2 justify-end">
+          <button type="button" onclick="closeEdit()" class="px-4 py-2 text-gray-600 hover:text-gray-900">Cancelar</button>
+          <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     function showTab(name) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -228,6 +276,23 @@
       const hash = name === 'hoy' ? '' : name;
       history.replaceState(null, '', hash ? '#' + hash : '/dashboard');
     }
+
+    function editApt(id, name, phone, date, time, serviceId, notes) {
+      document.getElementById('edit_id').value = id;
+      document.getElementById('edit_name').value = name;
+      document.getElementById('edit_phone').value = phone;
+      document.getElementById('edit_date').value = date;
+      document.getElementById('edit_time').value = time;
+      document.getElementById('edit_service').value = serviceId;
+      document.getElementById('edit_notes').value = notes;
+      document.getElementById('editForm').action = '/appointments/' + id + '/edit';
+      document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeEdit() {
+      document.getElementById('editModal').style.display = 'none';
+    }
+
     const tab = location.hash.replace('#', '') || 'hoy';
     showTab(tab);
   </script>

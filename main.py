@@ -130,23 +130,42 @@ async def logout():
 # ─── Dashboard ─────────────────────────────────────────────────────
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(req: Request, db: Session = Depends(get_db)):
+async def dashboard(req: Request, date: str = "", db: Session = Depends(get_db)):
     try:
         biz_id = get_current_business(req)
     except HTTPException:
         return RedirectResponse(url="/login")
     biz = db.query(Business).filter(Business.id == biz_id).first()
     today = datetime.now().strftime("%Y-%m-%d")
-    appointments = db.query(Appointment).filter(
+    filter_date = date if date else today
+    appointments_today = db.query(Appointment).filter(
         Appointment.business_id == biz_id,
         Appointment.date == today
     ).order_by(Appointment.time).all()
+    appointments_all = db.query(Appointment).filter(
+        Appointment.business_id == biz_id
+    )
+    if date:
+        appointments_all = appointments_all.filter(Appointment.date == date)
+    appointments_all = appointments_all.order_by(Appointment.date.desc(), Appointment.time).all()
+    confirmed_count = sum(1 for a in appointments_today if a.status == "confirmed")
+    pending_count = sum(1 for a in appointments_today if a.status == "pending")
+    cancelled_count = sum(1 for a in appointments_today if a.status == "cancelled")
+    total_count = len(appointments_today)
     services = db.query(Service).filter(Service.business_id == biz_id).all()
     avails = db.query(Availability).filter(Availability.business_id == biz_id).all()
     weekdays = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
     return templates.TemplateResponse("dashboard.html", {
-        "request": req, "biz": biz, "appointments": appointments,
-        "services": services, "availabilities": avails, "weekdays": weekdays, "today": today
+        "request": req, "biz": biz,
+        "appointments": appointments_today,
+        "appointments_all": appointments_all,
+        "services": services, "availabilities": avails,
+        "weekdays": weekdays, "today": today,
+        "filter_date": filter_date,
+        "confirmed_count": confirmed_count,
+        "pending_count": pending_count,
+        "cancelled_count": cancelled_count,
+        "total_count": total_count
     })
 
 
@@ -198,6 +217,21 @@ async def delete_appointment(apt_id: int, db: Session = Depends(get_db), req: Re
     apt = db.query(Appointment).filter(Appointment.id == apt_id, Appointment.business_id == biz_id).first()
     if apt:
         db.delete(apt)
+        db.commit()
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+
+@app.post("/appointments/{apt_id}/edit")
+async def edit_appointment(apt_id: int, client_name: str = Form(...), client_phone: str = Form(...), date: str = Form(...), time: str = Form(...), service_id: int = Form(0), notes: str = Form(""), db: Session = Depends(get_db), req: Request = None):
+    biz_id = get_current_business(req)
+    apt = db.query(Appointment).filter(Appointment.id == apt_id, Appointment.business_id == biz_id).first()
+    if apt:
+        apt.client_name = client_name
+        apt.client_phone = client_phone
+        apt.date = date
+        apt.time = time
+        apt.service_id = service_id if service_id > 0 else None
+        apt.notes = notes or None
         db.commit()
     return RedirectResponse(url="/dashboard", status_code=302)
 
