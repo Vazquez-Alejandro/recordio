@@ -91,7 +91,13 @@ async def register(name: str = Form(...), email: str = Form(...), password: str 
         return templates.TemplateResponse("register.html", {"request": {}, "error": "Email ya registrado"})
     import bcrypt
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    biz = Business(name=name, email=email, password_hash=pw_hash)
+    slug = name.lower().replace(" ", "-").replace("ñ", "n").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")[:30]
+    slug_base = slug
+    counter = 1
+    while db.query(Business).filter(Business.slug == slug).first():
+        slug = f"{slug_base}-{counter}"
+        counter += 1
+    biz = Business(name=name, email=email, password_hash=pw_hash, slug=slug)
     db.add(biz)
     db.commit()
     db.refresh(biz)
@@ -337,6 +343,97 @@ async def whatsapp_webhook(req: Request, db: Session = Depends(get_db)):
             apt.status = "cancelled"
         db.commit()
     return "<Response></Response>"
+
+
+# ─── Public booking page ──────────────────────────────────────────
+
+DAYS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
+
+
+@app.get("/book/{slug}", response_class=HTMLResponse)
+async def public_booking_page(slug: str, req: Request, db: Session = Depends(get_db)):
+    biz = db.query(Business).filter(Business.slug == slug, Business.active == True).first()
+    if not biz:
+        return HTMLResponse("Negocio no encontrado", status_code=404)
+    services = db.query(Service).filter(Service.business_id == biz.id).all()
+    return templates.TemplateResponse("public-book.html", {
+        "request": req, "biz": biz, "services": services,
+        "slug": slug, "days": DAYS
+    })
+
+
+@app.get("/api/{slug}/slots")
+async def public_slots(slug: str, date: str = "", service_id: int = 0, db: Session = Depends(get_db)):
+    biz = db.query(Business).filter(Business.slug == slug, Business.active == True).first()
+    if not biz:
+        return JSONResponse({"error": "No encontrado"}, status_code=404)
+    if not date or not service_id:
+        return {"slots": []}
+    try:
+        dt = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return {"slots": []}
+    day_idx = dt.weekday()
+    avails = db.query(Availability).filter(
+        Availability.business_id == biz.id,
+        Availability.day_of_week == day_idx
+    ).all()
+    if not avails:
+        return {"slots": []}
+    svc = db.query(Service).filter(Service.id == service_id, Service.business_id == biz.id).first()
+    duration = svc.duration_minutes if svc else 30
+    booked = db.query(Appointment).filter(
+        Appointment.business_id == biz.id,
+        Appointment.date == date,
+        Appointment.status.in_(["pending", "confirmed"])
+    ).all()
+    booked_times = set(apt.time for apt in booked)
+    slots = []
+    for av in avails:
+        h, m = av.start_time.hour, av.start_time.minute
+        end_h, end_m = av.end_time.hour, av.end_time.minute
+        start_min = h * 60 + m
+        end_min = end_h * 60 + end_m
+        t = start_min
+        while t + duration <= end_min:
+            slot = f"{t // 60:02d}:{t % 60:02d}"
+            if slot not in booked_times:
+                slots.append(slot)
+            t += duration
+    return {"slots": slots, "date": date, "service_id": service_id}
+
+
+@app.post("/api/{slug}/book")
+async def public_book(slug: str, req: Request, db: Session = Depends(get_db)):
+    biz = db.query(Business).filter(Business.slug == slug, Business.active == True).first()
+    if not biz:
+        return JSONResponse({"error": "No encontrado"}, status_code=404)
+    body = await req.json()
+    apt = Appointment(
+        business_id=biz.id,
+        service_id=body.get("service_id"),
+        client_name=body.get("name", ""),
+        client_phone=body.get("phone", ""),
+        date=body.get("date", ""),
+        time=body.get("time", ""),
+    )
+    db.add(apt)
+    db.commit()
+    db.refresh(apt)
+    svc = db.query(Service).filter(Service.id == apt.service_id).first() if apt.service_id else None
+    svc_name = svc.name if svc else "turno"
+    msg = f"Hola {apt.client_name}! Gracias por agendar tu {svc_name} para el {apt.date} a las {apt.time}."
+    await send_whatsapp(apt.client_phone, msg)
+    return {"ok": True}
+
+
+@app.get("/api/{slug}/services")
+async def public_services(slug: str, db: Session = Depends(get_db)):
+    biz = db.query(Business).filter(Business.slug == slug, Business.active == True).first()
+    if not biz:
+        return JSONResponse({"error": "No encontrado"}, status_code=404)
+    services = db.query(Service).filter(Service.business_id == biz.id).all()
+    return {"services": [{"id": s.id, "name": s.name, "duration": s.duration_minutes, "price": s.price} for s in services]}
 
 
 if __name__ == "__main__":

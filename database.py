@@ -23,6 +23,7 @@ class Business(Base):
     reminder_1h = Column(Boolean, default=True)
     reminder_before_minutes = Column(Integer, default=0)
     message_template = Column(String, default="Hola {client}! Te recordamos tu turno de {service} el {date} a las {time}. Respondé CONFIRMAR para confirmar o CANCELAR para cancelar.")
+    slug = Column(String, unique=True, nullable=True)
     active = Column(Boolean, default=True)
     plan = Column(String, default="free")
     stripe_customer_id = Column(String, nullable=True)

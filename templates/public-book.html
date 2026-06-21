@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agendá tu turno - {{ biz.name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-sm border w-full max-w-md p-6">
+    <div class="text-center mb-6">
+      <h1 class="text-xl font-bold">{{ biz.name }}</h1>
+      <p class="text-gray-500 text-sm">Agendá tu turno online</p>
+    </div>
+
+    <!-- Step 1: Select service -->
+    <div id="step1">
+      <label class="text-sm font-medium text-gray-700">Servicio</label>
+      <div class="flex flex-col gap-2 mt-2" id="services-list"></div>
+    </div>
+
+    <!-- Step 2: Select date -->
+    <div id="step2" class="hidden">
+      <button onclick="goTo(1)" class="text-sm text-green-600 hover:underline mb-3">&larr; Cambiar servicio</button>
+      <label class="text-sm font-medium text-gray-700">Fecha</label>
+      <input type="date" id="datePicker" class="w-full border rounded-lg px-4 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+        onchange="loadSlots()">
+    </div>
+
+    <!-- Step 3: Select time -->
+    <div id="step3" class="hidden">
+      <button onclick="goTo(2)" class="text-sm text-green-600 hover:underline mb-3">&larr; Cambiar fecha</button>
+      <label class="text-sm font-medium text-gray-700">Horario disponible</label>
+      <div class="grid grid-cols-3 gap-2 mt-2" id="slots-list"></div>
+    </div>
+
+    <!-- Step 4: Your info -->
+    <div id="step4" class="hidden">
+      <button onclick="goTo(3)" class="text-sm text-green-600 hover:underline mb-3">&larr; Cambiar horario</button>
+      <div class="flex flex-col gap-3">
+        <input type="text" id="clientName" placeholder="Nombre" required
+          class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+        <input type="text" id="clientPhone" placeholder="WhatsApp (ej: +5491123456789)" required
+          class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+        <p id="selectedInfo" class="text-sm text-gray-500"></p>
+        <button onclick="book()" class="bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-medium">Confirmar turno</button>
+      </div>
+    </div>
+
+    <!-- Done -->
+    <div id="step5" class="hidden text-center py-8">
+      <div class="text-5xl mb-4">✅</div>
+      <h2 class="text-lg font-semibold">Turno agendado</h2>
+      <p class="text-gray-500 text-sm mt-2">Te enviamos un recordatorio por WhatsApp.</p>
+    </div>
+
+    <div id="loading" class="hidden text-center py-8 text-gray-500">Cargando...</div>
+  </div>
+
+  <script>
+    const SLUG = "{{ slug }}";
+    let selectedService = null, selectedDate = null, selectedTime = null;
+
+    async function loadServices() {
+      const r = await fetch(`/api/${SLUG}/services`);
+      const data = await r.json();
+      const list = document.getElementById('services-list');
+      list.innerHTML = data.services.map(s =>
+        `<button onclick="selectService(${s.id},'${s.name}',${s.duration})"
+           class="text-left border rounded-xl px-4 py-3 hover:border-green-500 hover:bg-green-50 transition text-sm">
+          <span class="font-medium">${s.name}</span>
+          ${s.price ? `<span class="text-gray-500"> - $${s.price.toFixed(2)}</span>` : ''}
+          <span class="text-gray-400 text-xs block">${s.duration} min</span>
+        </button>`
+      ).join('');
+    }
+
+    function selectService(id, name, dur) {
+      selectedService = { id, name, dur };
+      document.getElementById('step1').classList.add('hidden');
+      document.getElementById('step2').classList.remove('hidden');
+      const min = new Date().toISOString().split('T')[0];
+      document.getElementById('datePicker').setAttribute('min', min);
+      document.getElementById('datePicker').value = '';
+    }
+
+    async function loadSlots() {
+      selectedDate = document.getElementById('datePicker').value;
+      if (!selectedDate || !selectedService) return;
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('step2').classList.add('hidden');
+      const r = await fetch(`/api/${SLUG}/slots?date=${selectedDate}&service_id=${selectedService.id}`);
+      const data = await r.json();
+      document.getElementById('loading').classList.add('hidden');
+      if (!data.slots.length) {
+        document.getElementById('slots-list').innerHTML = '<p class="text-gray-500 text-sm col-span-3">No hay horarios disponibles</p>';
+      } else {
+        document.getElementById('slots-list').innerHTML = data.slots.map(s =>
+          `<button onclick="selectTime('${s}')"
+             class="border rounded-lg px-3 py-2 text-sm hover:border-green-500 hover:bg-green-50 transition text-center">${s}</button>`
+        ).join('');
+      }
+      document.getElementById('step2').classList.remove('hidden');
+      document.getElementById('step3').classList.remove('hidden');
+    }
+
+    function selectTime(time) {
+      selectedTime = time;
+      document.querySelectorAll('#slots-list button').forEach(b => {
+        b.classList.remove('border-green-500', 'bg-green-50');
+        if (b.textContent.trim() === time) b.classList.add('border-green-500', 'bg-green-50');
+      });
+      document.getElementById('step3').classList.add('hidden');
+      document.getElementById('selectedInfo').textContent =
+        `${selectedService.name} - ${selectedDate} a las ${selectedTime}`;
+      document.getElementById('step4').classList.remove('hidden');
+    }
+
+    function goTo(step) {
+      [1,2,3,4].forEach(i => document.getElementById('step' + i).classList.add('hidden'));
+      document.getElementById('step' + step).classList.remove('hidden');
+      if (step <= 2) { selectedTime = null; document.getElementById('step3').classList.add('hidden'); }
+      if (step <= 1) { selectedDate = null; document.getElementById('step2').classList.add('hidden'); }
+    }
+
+    async function book() {
+      const name = document.getElementById('clientName').value.trim();
+      const phone = document.getElementById('clientPhone').value.trim();
+      if (!name || !phone) return alert('Completá todos los datos');
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('step4').classList.add('hidden');
+      const r = await fetch(`/api/${SLUG}/book`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ service_id: selectedService.id, name, phone, date: selectedDate, time: selectedTime })
+      });
+      document.getElementById('loading').classList.add('hidden');
+      if (r.ok) {
+        document.getElementById('step5').classList.remove('hidden');
+      } else {
+        alert('Error al agendar. Intentá de nuevo.');
+        document.getElementById('step4').classList.remove('hidden');
+      }
+    }
+
+    loadServices();
+  </script>
+</body>
+</html>

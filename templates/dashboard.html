@@ -205,6 +205,13 @@
             <textarea name="message_template" rows="3" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">{{ biz.message_template }}</textarea>
             <p class="text-xs text-gray-400 mt-1">Variables: {client}, {service}, {date}, {time}</p>
           </div>
+          <div class="sm:col-span-2">
+            <label class="text-xs text-gray-500">Link público para que tus clientes agenden</label>
+            <div class="flex gap-2 items-center">
+              <code class="text-sm bg-gray-100 px-3 py-1.5 rounded flex-1 truncate">/book/{{ biz.slug }}</code>
+              <button onclick="navigator.clipboard.writeText(window.location.origin+'/book/{{ biz.slug }}')" class="text-xs text-green-600 hover:underline">Copiar</button>
+            </div>
+          </div>
           <button type="submit" class="sm:col-span-2 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">Guardar cambios</button>
         </form>
 
